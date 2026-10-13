@@ -275,10 +275,11 @@ export default function ChatbotModule({ onInquirySubmit }) {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowInquiry(true)}
-              className="hidden sm:flex items-center gap-1.5 text-xs bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 border border-orange-500/30 px-3 py-1.5 rounded-lg transition-all duration-200"
+              className="flex items-center gap-1.5 text-xs font-semibold bg-gradient-to-r from-orange-500/25 to-amber-500/25 hover:from-orange-500/35 hover:to-amber-500/35 text-orange-300 border border-orange-500/40 px-2.5 py-1.5 rounded-lg transition-all duration-200 shadow-sm"
+              title="Gửi yêu cầu báo giá chính thức"
             >
-              <Fish size={12} />
-              Gửi Yêu Cầu
+              <Fish size={13} className="text-orange-400" />
+              <span>Gửi Yêu Cầu</span>
             </button>
             <button
               onClick={handleReset}
@@ -372,6 +373,12 @@ export default function ChatbotModule({ onInquirySubmit }) {
       {/* Quick Questions */}
       <div className="px-3 sm:px-4 py-2 border-t border-slate-700/30">
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          <button
+            onClick={() => setShowInquiry(true)}
+            className="flex-shrink-0 text-xs font-semibold bg-gradient-to-r from-orange-500/25 to-amber-500/25 hover:from-orange-500/35 hover:to-amber-500/35 border border-orange-500/40 text-orange-300 px-3 py-1.5 rounded-full transition-all whitespace-nowrap shadow-sm flex items-center gap-1"
+          >
+            📋 Gửi Yêu Cầu Báo Giá
+          </button>
           {QUICK_QUESTIONS.map((q, i) => (
             <button
               key={i}
@@ -382,12 +389,6 @@ export default function ChatbotModule({ onInquirySubmit }) {
               {q.label}
             </button>
           ))}
-          <button
-            onClick={() => setShowInquiry(true)}
-            className="flex-shrink-0 sm:hidden text-xs bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/30 text-orange-400 px-3 py-1.5 rounded-full transition-all whitespace-nowrap"
-          >
-            📋 Gửi Yêu Cầu
-          </button>
         </div>
       </div>
 
