@@ -6,13 +6,32 @@ import InquiryModal from './InquiryModal';
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 const MODEL_NAME = import.meta.env.VITE_GEMINI_MODEL || 'gemini-flash-lite-latest';
 
-// Support multiple API keys with fallback
+// Support multiple API keys with Round-Robin load balancing & fallback
 const API_KEYS = API_KEY ? API_KEY.split(',').map(k => k.trim()).filter(Boolean) : [];
 
-function getNextApiKey(failedKey) {
-  if (API_KEYS.length <= 1) return API_KEYS[0] || '';
-  const currentIdx = API_KEYS.indexOf(failedKey);
-  return API_KEYS[(currentIdx + 1) % API_KEYS.length];
+let currentKeyIndex = (() => {
+  try {
+    const saved = sessionStorage.getItem('afoods_key_idx');
+    return saved ? parseInt(saved, 10) || 0 : 0;
+  } catch {
+    return 0;
+  }
+})();
+
+function getRotatedApiKeys() {
+  if (API_KEYS.length <= 1) return API_KEYS;
+  const startIdx = currentKeyIndex % API_KEYS.length;
+  // Advance pointer for the next message
+  currentKeyIndex = (startIdx + 1) % API_KEYS.length;
+  try {
+    sessionStorage.setItem('afoods_key_idx', currentKeyIndex);
+  } catch {}
+
+  // Active key is placed first, others follow as instant fallbacks
+  return [
+    ...API_KEYS.slice(startIdx),
+    ...API_KEYS.slice(0, startIdx)
+  ];
 }
 
 function parseMarkdown(text) {
@@ -83,7 +102,7 @@ function getLocalFallbackResponse(query) {
   return `🌊 **AFOODS hân hạnh phục vụ Quý đối tác!**\n\n*"Good food, good health"* — AFOODS chuyên chế biến & xuất khẩu thủy sản cao cấp đạt mã **EU DL 422 & DH 323**, BRC, ISO 22000, HACCP, HALAL, ASC/MSC, FDA:\n\n- 🥔 **Sản phẩm GTGT**: Tôm cuộn khoai tây (Potato Wrapped PTO Shrimp), Há cảo túi tiền (Money Bag Hargao), Sò điệp Farci, Chả giò, Chạo tôm\n- 🍣 **Sushi Neta Nhật Bản**: Tsubu-gai (ốc biển), Harasu (lườn cá hồi), AkaIka (mực đỏ)\n- 🦐 **Tôm đông lạnh**: Tôm Sú, Tôm Thẻ (IQF/Block)\n- 🐟 **Cá & Mực đông lạnh**: Cá Tra/Basa, Cá Biển, Mực ống & nang\n\nQuý khách vui lòng cho biết nhu cầu hoặc nhấn **"Gửi Yêu Cầu"** để nhận báo giá chi tiết! 😊`;
 }
 
-async function callGemini(apiKey, modelName, contents, timeoutMs = 12000) {
+async function callGemini(apiKey, modelName, contents, timeoutMs = 22000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -165,20 +184,29 @@ export default function ChatbotModule({ onInquirySubmit }) {
     let aiText = null;
 
     if (API_KEYS.length > 0) {
-      // 1. Try requested model first (gemini-flash-lite-latest)
-      // 2. If overloaded (> 10s or 503), immediately fallback to ultra-fast 3.1-flash-lite
-      const modelsToTry = [MODEL_NAME, 'gemini-3.1-flash-lite', 'gemini-flash-latest']
-        .filter((v, i, a) => a.indexOf(v) === i);
+      // 1. Try gemini-3.1-flash-lite first (verified 6-10s response time, zero queue latency)
+      // 2. Fall back to configured MODEL_NAME and gemini-3.5-flash
+      const modelsToTry = [
+        'gemini-3.1-flash-lite',
+        MODEL_NAME,
+        'gemini-3.5-flash'
+      ].filter((v, i, a) => a.indexOf(v) === i);
+
+      const rotatedKeys = getRotatedApiKeys();
 
       for (const model of modelsToTry) {
         if (aiText) break;
-        for (const key of API_KEYS) {
+        for (const key of rotatedKeys) {
           try {
-            const timeout = model === MODEL_NAME ? 10000 : 8000;
-            aiText = await callGemini(key, model, formattedHistory, timeout);
-            if (aiText) break;
+            aiText = await callGemini(key, model, formattedHistory, 20000);
+            if (aiText) {
+              const keyNum = API_KEYS.indexOf(key) + 1;
+              console.log(`[Gemini] ✅ Succeeded with Model: ${model} | API Key #${keyNum}`);
+              break;
+            }
           } catch (err) {
-            console.warn(`[Gemini] ${model} failed (${err.message}), trying next fallback...`);
+            const keyNum = API_KEYS.indexOf(key) + 1;
+            console.warn(`[Gemini] ⚠️ ${model} with Key #${keyNum} failed (${err.message}), trying next...`);
           }
         }
       }
